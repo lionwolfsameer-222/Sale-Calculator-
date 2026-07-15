@@ -426,6 +426,9 @@ const LOGO_DATA_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQ0AAAEsCAY
 el_logo_early = document.getElementById('headerLogo');
 if(el_logo_early) el_logo_early.src = LOGO_DATA_URI;
 const STORAGE_KEY = 'healthyChefCashResult';
+// Remembers which date was on-screen when the page was last closed/refreshed,
+// so reopening the app shows the exact same date instead of jumping to today.
+const LAST_DATE_KEY = STORAGE_KEY + '_lastOpenDate';
 const entryIds = ['balYestUpar','balYestNiche','cashSale','paytm','gpay','swiggy','zomato','expOnline','expCash'];
 const el = id => document.getElementById(id);
 const dateInput = el('dateInput');
@@ -450,10 +453,21 @@ function saveDraftForCurrentDate(){
   const rec = {}; entryIds.forEach(id => rec[id] = v[id]); rec.denom = v.denom;
   drafts[dateInput.value] = rec;
   saveDrafts(drafts);
+  saveLastOpenDate(dateInput.value);
 }
 function clearDraftForDate(dateStr){
   const drafts = getDrafts();
   if(drafts[dateStr] !== undefined){ delete drafts[dateStr]; saveDrafts(drafts); }
+}
+
+// Last-open-date: written every time the visible date changes (or the user
+// types into the current entry) so that closing the tab / refreshing mid-entry
+// and reopening later lands back on the exact same date, exactly as left.
+function saveLastOpenDate(dateStr){
+  try{ localStorage.setItem(LAST_DATE_KEY, dateStr); }catch(e){}
+}
+function getLastOpenDate(){
+  try{ return localStorage.getItem(LAST_DATE_KEY); }catch(e){ return null; }
 }
 function num(id){ return parseFloat(el(id).value) || 0; }
 function fmt(n){ return '₹' + Math.round(n).toLocaleString('en-IN'); }
@@ -511,15 +525,18 @@ function loadDate(dateStr){
   denomInputs().forEach(inp => inp.value = '');
 
   if(rec){
-    entryIds.forEach(id => { if(rec[id] !== undefined) el(id).value = rec[id]; });
-    if(rec.denom){ denomInputs().forEach(inp => { if(rec.denom[inp.dataset.v] !== undefined) inp.value = rec.denom[inp.dataset.v]; }); }
+    // '|| ""' turns a stored 0 into a blank field (0 and blank compute the
+    // same via num()/parseFloat) so typing into it doesn't start from "0"
+    // and produce "0747" instead of "747".
+    entryIds.forEach(id => { if(rec[id] !== undefined) el(id).value = rec[id] || ''; });
+    if(rec.denom){ denomInputs().forEach(inp => { if(rec.denom[inp.dataset.v] !== undefined) inp.value = rec.denom[inp.dataset.v] || ''; }); }
     statusPill.textContent = 'Saved ✓';
     statusPill.classList.add('saved');
   } else {
     const draft = getDrafts()[dateStr];
     if(draft){
-      entryIds.forEach(id => { if(draft[id] !== undefined) el(id).value = draft[id]; });
-      if(draft.denom){ denomInputs().forEach(inp => { if(draft.denom[inp.dataset.v] !== undefined) inp.value = draft.denom[inp.dataset.v]; }); }
+      entryIds.forEach(id => { if(draft[id] !== undefined) el(id).value = draft[id] || ''; });
+      if(draft.denom){ denomInputs().forEach(inp => { if(draft.denom[inp.dataset.v] !== undefined) inp.value = draft.denom[inp.dataset.v] || ''; }); }
     }
     statusPill.textContent = 'New Entry';
     statusPill.classList.remove('saved');
@@ -584,6 +601,7 @@ let activeDate = dateInput.value;
 dateInput.addEventListener('change', ()=>{
   autoSaveDate(activeDate);
   activeDate = dateInput.value;
+  saveLastOpenDate(activeDate);
   loadDate(activeDate);
   renderHistory();
 });
@@ -680,9 +698,12 @@ if(denom500ArrowBtn){
   denom500ArrowBtn.addEventListener('click', ()=>{ goToResultPage(); });
 }
 
-// Init
-dateInput.value = todayStr();
+// Init — reopen on whichever date was on-screen when the page was last
+// closed/refreshed (with whatever half-entered values it had), instead of
+// always jumping to today. First-ever open (no history yet) defaults to today.
+dateInput.value = getLastOpenDate() || todayStr();
 activeDate = dateInput.value;
+saveLastOpenDate(dateInput.value);
 loadDate(dateInput.value);
 renderHistory();
 
@@ -704,6 +725,7 @@ setInterval(()=>{
       autoSaveDate(currentCalendarDay);
       activeDate = nowStr;
       dateInput.value = nowStr;
+      saveLastOpenDate(nowStr);
       loadDate(nowStr);
       renderHistory();
     }
