@@ -81,11 +81,11 @@
   .calc-display{
     background:var(--navy-950); border:1px solid var(--navy-700); border-radius:10px;
     padding:10px 12px; text-align:right; color:var(--cream);
-    margin-bottom:10px; overflow-x:auto; white-space:nowrap; font-variant-numeric:tabular-nums;
+    margin-bottom:10px; font-variant-numeric:tabular-nums;
     flex:0 0 auto;
   }
-  .calc-display .calc-result{ font-size:28px; font-weight:800; line-height:1.25; }
-  .calc-display .calc-expr{ font-size:12.5px; font-weight:600; color:#9fb0e0; margin-top:2px; min-height:15px; }
+  .calc-display .calc-result{ font-size:28px; font-weight:800; line-height:1.25; overflow-x:auto; white-space:nowrap; }
+  .calc-display .calc-expr{ font-size:12.5px; font-weight:600; color:#9fb0e0; margin-top:2px; min-height:15px; overflow-x:auto; white-space:nowrap; }
   .calc-gpay-btn{
     flex:0 0 auto; width:100%; margin-top:8px; padding:11px; border-radius:10px; border:none;
     background:linear-gradient(180deg, var(--good), #37835d); color:#08140d;
@@ -780,6 +780,10 @@ setInterval(()=>{
     if(val !== null) currentValue = val;
     calcResultEl.textContent = (val === null) ? '0' : (Math.round(val*100000)/100000).toLocaleString('en-IN');
     calcExprEl.textContent = frozenExpr !== null ? frozenExpr : expr;
+    // Only the small running-expression line auto-scrolls to show the latest
+    // digits — it now has its own scroll box, separate from the Total value,
+    // so the Total never gets dragged out of view.
+    calcExprEl.scrollLeft = calcExprEl.scrollWidth;
   }
 
   // "Add to G-Pay" — takes whatever total the calculator is currently showing
