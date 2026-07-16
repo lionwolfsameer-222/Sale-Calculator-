@@ -162,13 +162,6 @@
   .denom-cell .damt{ font-size:11px; color:#8592ba; width:100%; text-align:right; margin-top:2px; }
   .denom-note{ font-size:11.5px; color:#8592ba; margin:8px 0 4px; line-height:1.5; }
 
-  .denom-cell.denom-result-btn{
-    border:none; cursor:pointer; justify-content:center;
-    background:linear-gradient(180deg, var(--gold), var(--gold-dim)); color:var(--navy-950);
-    font-size:13.5px; font-weight:800; letter-spacing:0.3px;
-  }
-  .denom-cell.denom-result-btn:active{ transform:scale(0.95); }
-
   .result-row{
     display:flex; justify-content:space-between; align-items:center;
     padding:13px 0; border-bottom:1px solid var(--line);
@@ -183,7 +176,6 @@
   .result-row.shortage .rvalue.bad{ color:var(--danger); }
 
   .btn-row{ display:flex; gap:10px; margin-top:6px; }
-  #entryBtnRow{ justify-content:flex-end; }
   button.primary{
     flex:1; background:linear-gradient(180deg, var(--gold), var(--gold-dim)); border:none; color:var(--navy-950);
     font-weight:800; font-size:15px; padding:13px; border-radius:12px; cursor:pointer;
@@ -345,12 +337,13 @@
         <div class="denom-cell"><span class="dlabel">₹100</span><input type="number" data-v="100" placeholder="0"></div>
         <div class="denom-cell"><span class="dlabel">₹200</span><input type="number" data-v="200" placeholder="0"></div>
         <div class="denom-cell" id="denom500Cell"><span class="dlabel">₹500</span><input type="number" data-v="500" id="denom500Input" placeholder="0"></div>
-        <button type="button" class="denom-cell denom-result-btn" id="denom500ArrowBtn" title="Result Page par jayein">Result</button>
+        <div class="denom-cell" id="denomExtraCell"><span class="dlabel">Other</span><input type="number" id="denomExtraInput" inputmode="decimal" step="any" placeholder="0"></div>
       </div>
     </section>
 
     <div class="btn-row" id="entryBtnRow">
       <button class="secondary danger" id="resetBtn" title="Is date ki entered values clear karein">⟲ Reset</button>
+      <button type="button" class="primary" id="denom500ArrowBtn" title="Result Page par jayein">Result →</button>
     </div>
   </div>
 
@@ -358,13 +351,13 @@
   <div class="page" id="pageResult">
     <section class="card">
       <h2>Today's Result — <span id="resultDate"></span></h2>
-      <div class="result-row"><span class="rlabel">Cash Deposit</span><span class="rvalue" id="rCashDeposit">₹0</span></div>
       <div class="result-row"><span class="rlabel">Paytm</span><span class="rvalue" id="rPaytm">₹0</span></div>
       <div class="result-row"><span class="rlabel">Other (GPay+Swiggy+Zomato)</span><span class="rvalue" id="rOther">₹0</span></div>
       <div class="result-row exp"><span class="rlabel">Cash Expense</span><span class="rvalue" id="rExpCash">₹0</span></div>
       <div class="result-row exp"><span class="rlabel">Online Expense</span><span class="rvalue" id="rExpOnline">₹0</span></div>
       <div class="result-row pos highlight"><span class="rlabel">POS Sale</span><span class="rvalue" id="rPosSale">₹0</span></div>
-      <div class="result-row highlight" style="display:none;"><span class="rlabel">In Hand Today</span><span class="rvalue" id="rInHand">₹0</span></div>
+      <div class="result-row highlight"><span class="rlabel">Opening Balance</span><span class="rvalue" id="rInHand">₹0</span></div>
+      <div class="result-row highlight"><span class="rlabel">Deposit Amount</span><span class="rvalue" id="rCashDeposit">₹0</span></div>
       <div class="result-row highlight"><span class="rlabel">Balance Total (Niche)</span><span class="rvalue" id="rNicheTotal">₹0</span></div>
       <div class="result-row shortage highlight"><span class="rlabel">Shortage</span><span class="rvalue" id="rShortage">₹0</span></div>
     </section>
@@ -433,7 +426,10 @@ const entryIds = ['balYestUpar','balYestNiche','cashSale','paytm','gpay','swiggy
 const el = id => document.getElementById(id);
 const dateInput = el('dateInput');
 const statusPill = el('statusPill');
-const denomInputs = () => Array.from(document.querySelectorAll('#denomGrid input'));
+const denomInputs = () => Array.from(document.querySelectorAll('#denomGrid input[data-v]'));
+// The "Other" box next to ₹500 holds a single free-form amount (not a count ×
+// denomination), so it's kept out of denomInputs() and handled separately.
+const denomExtraInput = () => el('denomExtraInput');
 
 function todayStr(){
   const d = new Date();
@@ -483,6 +479,9 @@ function computeFromValues(v){
     const amt = count * value;
     if(value === 500) total500 += amt; else inHand += amt;
   });
+  // Deposit Amount = ₹500 notes total + whatever is entered in the "Other" box.
+  const extraAmt = (v.denom && parseFloat(v.denom.extra)) || 0;
+  total500 += extraAmt;
 
   const nicheTotal = v.balYestNiche + total500 - v.expCash;
   const shortage = (total500 + inHand) - v.cashSale - v.balYestUpar;
@@ -495,6 +494,7 @@ function currentValues(){
   entryIds.forEach(id => v[id] = num(id));
   v.denom = {};
   denomInputs().forEach(inp => v.denom[inp.dataset.v] = parseFloat(inp.value) || 0);
+  v.denom.extra = parseFloat(denomExtraInput().value) || 0;
   return v;
 }
 
@@ -523,20 +523,27 @@ function loadDate(dateStr){
   const rec = records[dateStr];
   entryIds.forEach(id => el(id).value = '');
   denomInputs().forEach(inp => inp.value = '');
+  denomExtraInput().value = '';
 
   if(rec){
     // '|| ""' turns a stored 0 into a blank field (0 and blank compute the
     // same via num()/parseFloat) so typing into it doesn't start from "0"
     // and produce "0747" instead of "747".
     entryIds.forEach(id => { if(rec[id] !== undefined) el(id).value = rec[id] || ''; });
-    if(rec.denom){ denomInputs().forEach(inp => { if(rec.denom[inp.dataset.v] !== undefined) inp.value = rec.denom[inp.dataset.v] || ''; }); }
+    if(rec.denom){
+      denomInputs().forEach(inp => { if(rec.denom[inp.dataset.v] !== undefined) inp.value = rec.denom[inp.dataset.v] || ''; });
+      if(rec.denom.extra !== undefined) denomExtraInput().value = rec.denom.extra || '';
+    }
     statusPill.textContent = 'Saved ✓';
     statusPill.classList.add('saved');
   } else {
     const draft = getDrafts()[dateStr];
     if(draft){
       entryIds.forEach(id => { if(draft[id] !== undefined) el(id).value = draft[id] || ''; });
-      if(draft.denom){ denomInputs().forEach(inp => { if(draft.denom[inp.dataset.v] !== undefined) inp.value = draft.denom[inp.dataset.v] || ''; }); }
+      if(draft.denom){
+        denomInputs().forEach(inp => { if(draft.denom[inp.dataset.v] !== undefined) inp.value = draft.denom[inp.dataset.v] || ''; });
+        if(draft.denom.extra !== undefined) denomExtraInput().value = draft.denom.extra || '';
+      }
     }
     statusPill.textContent = 'New Entry';
     statusPill.classList.remove('saved');
@@ -594,6 +601,7 @@ function autoSaveDate(dateStr){
 // Event bindings
 entryIds.forEach(id => el(id).addEventListener('input', ()=>{ calc(); saveDraftForCurrentDate(); }));
 denomInputs().forEach(inp => inp.addEventListener('input', ()=>{ calc(); saveDraftForCurrentDate(); }));
+denomExtraInput().addEventListener('input', ()=>{ calc(); saveDraftForCurrentDate(); });
 
 // Tracks whichever date is currently on-screen, so that when the person picks
 // a new date we know exactly which OLD date's entry to auto-save.
@@ -624,6 +632,7 @@ el('resetBtn').addEventListener('click', ()=>{
   if(!ok) return;
   entryIds.forEach(id => el(id).value = '');
   denomInputs().forEach(inp => inp.value = '');
+  denomExtraInput().value = '';
   clearDraftForDate(dateInput.value);
   calc();
   // Reset only clears the on-screen form + draft. It never touches saved History.
